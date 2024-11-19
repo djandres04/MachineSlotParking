@@ -9,6 +9,12 @@ const CameraApp = () => {
     const canvasRef = useRef(null);
     const captureIntervalRef = useRef(null);
 
+    const clearCanvas = () => {
+        const canvas = canvasRef.current;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+    };
+
     // Función para obtener los dispositivos de cámara disponibles
     useEffect(() => {
         const getVideoDevices = async () => {
@@ -31,6 +37,7 @@ const CameraApp = () => {
             });
             setStream(newStream);
             videoRef.current.srcObject = newStream;
+            clearCanvas();
         }
     };
 
@@ -39,10 +46,12 @@ const CameraApp = () => {
         if (stream) {
             stream.getTracks().forEach((track) => track.stop());
             setStream(null);
+            clearCanvas();
         }
         if (captureIntervalRef.current) {
             clearInterval(captureIntervalRef.current);
             captureIntervalRef.current = null;
+            clearCanvas();
         }
     };
 
@@ -53,14 +62,20 @@ const CameraApp = () => {
             const canvas = canvasRef.current;
             const context = canvas.getContext("2d");
 
-            // Establecer el tamaño del canvas para que coincida con las dimensiones del video
+            // Crear un canvas secundario para el buffer
+            const bufferCanvas = document.createElement("canvas");
+            const bufferContext = bufferCanvas.getContext("2d");
+
+            // Ajustar dimensiones de ambos canvas al tamaño del video
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
+            bufferCanvas.width = video.videoWidth;
+            bufferCanvas.height = video.videoHeight;
 
-            // Dibujar el video en el canvas
+            // Dibujar el video en el canvas principal
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Convertir el canvas a un blob (imagen)
+            // Convertir el canvas a un blob para enviarlo al backend
             canvas.toBlob(async (blob) => {
                 if (blob) {
                     const formData = new FormData();
@@ -79,12 +94,17 @@ const CameraApp = () => {
                         const data = await response.json();
                         console.log("Respuesta del backend:", data);
 
-                        // Asume que 'detections' es la respuesta del backend
+                        // Detecciones recibidas del backend
                         const detections = data.detections || [];
                         console.log("Detecciones:", detections);
 
-                        // Llama a la función para dibujar las cajas de detección sobre el canvas
-                        drawBoxes(detections, context);
+                        // Dibujar las detecciones en el canvas de buffer
+                        drawBoxes(detections, bufferContext);
+
+                        // Alternar entre el buffer y el canvas principal
+                        context.clearRect(0, 0, canvas.width, canvas.height); // Limpiar el canvas principal
+                        context.drawImage(video, 0, 0, canvas.width, canvas.height); // Dibujar el video
+                        context.drawImage(bufferCanvas, 0, 0); // Superponer las detecciones del buffer
                     } catch (error) {
                         console.error("Error al enviar la imagen:", error);
                     }
@@ -93,47 +113,47 @@ const CameraApp = () => {
         }
     };
 
-    // Función para dibujar las cajas de las detecciones en el canvas
+// Función para dibujar las cajas en el buffer canvas
     const drawBoxes = (detections, context) => {
-        // Limpiar el canvas antes de dibujar las nuevas cajas
-        context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        // Limpiar el canvas de buffer antes de dibujar las nuevas detecciones
+        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
 
-        // Dibujar el video de nuevo en el canvas
-        const video = videoRef.current;
-        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        // Dibujar las cajas de detección
+        detections.forEach((detection) => {
+            const [x_min, y_min, x_max, y_max] = detection.box;
+            const label = detection.class;
+            const confidence = detection.confidence;
 
-        // Dibujar las cajas de detección sobre la imagen
-        detections.forEach((box) => {
-            const { x, y, width, height, confidence } = box;
+            const width = x_max - x_min;
+            const height = y_max - y_min;
 
-            // Asegurarse de que las cajas no se salgan del canvas
-            const maxX = Math.min(x + width, canvasRef.current.width);
-            const maxY = Math.min(y + height, canvasRef.current.height);
-
-            const finalWidth = maxX - x;
-            const finalHeight = maxY - y;
-
-            // Dibuja el rectángulo (caja)
+            // Dibujar el rectángulo (caja)
             context.beginPath();
-            context.rect(x, y, finalWidth, finalHeight);
+            context.rect(x_min, y_min, width, height);
             context.lineWidth = 3;
             context.strokeStyle = "red";
-            context.fillStyle = "red";
+            context.fillStyle = "rgba(255, 0, 0, 0.2)"; // Fondo semitransparente
+            context.fill();
             context.stroke();
 
-            // Dibuja el texto con el nivel de confianza
-            context.font = "20px Arial";
-            context.fillText(`Conf: ${confidence.toFixed(2)}`, x, y - 10);
+            // Dibujar el texto con la clase y confianza
+            context.font = "18px Arial";
+            context.fillStyle = "red";
+            const text = `${label} (${(confidence * 100).toFixed(1)}%)`;
+            context.fillText(text, x_min, y_min - 5); // Texto arriba de la caja
         });
     };
 
     // Función para iniciar la captura continua
     const startCapturing = () => {
-        console.log("Iniciando captura continua...");
         setIsCapturing(true);
-        captureIntervalRef.current = setInterval(() => {
-            captureAndSendImage(); // Captura la imagen y envíala al backend
-        }, 200); // Enviar la imagen cada 200 ms
+        const intervalId = setInterval(() => {
+            if (setIsCapturing) {
+                captureAndSendImage(); // Captura la imagen y envíala al backend
+            } else {
+                clearInterval(intervalId); // Detener el intervalo cuando deje de capturar
+            }
+        }, 500); // Cada 200ms
     };
 
     // Función para detener la captura continua
@@ -191,7 +211,7 @@ const CameraApp = () => {
                         top: 0,
                         left: 0,
                         pointerEvents: "none", // Para que no interfiera con el video
-                        display: stream ? "block" : "none",
+                        width: "640px", height: "480px", display: stream ? "block" : "none"
                     }}
                 />
             </div>
