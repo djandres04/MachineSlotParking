@@ -7,10 +7,9 @@ const CameraApp = () => {
     const [isCapturing, setIsCapturing] = useState(false);
 
     const videoRef = useRef(null); // Video principal
-    const referenceVideoRef = useRef(null); // Video de referencia
-    const mainCanvasRef = useRef(null);
-    const tempCanvasRef = useRef(null);
-    const captureIntervalRef = useRef(null);
+    const processedCanvasRef = useRef(null); // Canvas con detecciones
+    const tempCanvasRef = useRef(null); // Canvas temporal para procesamiento
+    const captureIntervalRef = useRef(null); // Referencia para intervalos de captura
 
     const clearCanvas = (canvas) => {
         const context = canvas.getContext("2d");
@@ -36,8 +35,6 @@ const CameraApp = () => {
             });
             setStream(newStream);
             videoRef.current.srcObject = newStream;
-            referenceVideoRef.current.srcObject = newStream; // Vincular stream al video de referencia
-            clearCanvas(mainCanvasRef.current);
         }
     };
 
@@ -45,32 +42,28 @@ const CameraApp = () => {
         if (stream) {
             stream.getTracks().forEach((track) => track.stop());
             setStream(null);
-            clearCanvas(mainCanvasRef.current);
         }
         if (captureIntervalRef.current) {
             clearInterval(captureIntervalRef.current);
             captureIntervalRef.current = null;
         }
+        clearCanvas(processedCanvasRef.current);
     };
 
     const captureAndSendImage = async () => {
         if (videoRef.current && tempCanvasRef.current) {
-            console.log("Capturando y enviando");
             const video = videoRef.current;
             const tempCanvas = tempCanvasRef.current;
-            const mainCanvas = mainCanvasRef.current;
-
             const tempContext = tempCanvas.getContext("2d");
-            const mainContext = mainCanvas.getContext("2d");
 
-            tempCanvas.width = video.videoWidth;
-            tempCanvas.height = video.videoHeight;
+            // Ajustar dimensiones a 720p
+            tempCanvas.width = 1280;
+            tempCanvas.height = 720;
 
-            mainCanvas.width = video.videoWidth;
-            mainCanvas.height = video.videoHeight;
-
+            // Dibujar el frame del video
             tempContext.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
 
+            // Convertir el canvas temporal a un blob
             tempCanvas.toBlob(async (blob) => {
                 if (blob) {
                     const formData = new FormData();
@@ -86,15 +79,37 @@ const CameraApp = () => {
                             throw new Error(`HTTP error! Status: ${response.status}`);
                         }
 
+                        // Obtener detecciones del backend
                         const data = await response.json();
                         const detections = data.detections || [];
 
-                        // Dibujar boxes en el canvas temporal
-                        drawBoxes(detections, tempContext);
+                        // Dibujar en el canvas procesado
+                        const processedCanvas = processedCanvasRef.current;
+                        const processedContext = processedCanvas.getContext("2d");
 
-                        // Limpiar y copiar contenido del canvas temporal al principal
-                        mainContext.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-                        mainContext.drawImage(tempCanvas, 0, 0);
+                        // Ajustar dimensiones
+                        processedCanvas.width = tempCanvas.width;
+                        processedCanvas.height = tempCanvas.height;
+
+                        // Dibujar la imagen base
+                        processedContext.clearRect(0, 0, processedCanvas.width, processedCanvas.height);
+                        processedContext.drawImage(tempCanvas, 0, 0);
+
+                        // Dibujar los cuadros de detección
+                        detections.forEach((detection) => {
+                            const [x_min, y_min, x_max, y_max] = detection.box;
+                            const label = `${detection.class} (${(detection.confidence * 100).toFixed(1)}%)`;
+
+                            // Dibujar rectángulo
+                            processedContext.strokeStyle = "red";
+                            processedContext.lineWidth = 2;
+                            processedContext.strokeRect(x_min, y_min, x_max - x_min, y_max - y_min);
+
+                            // Dibujar texto
+                            processedContext.font = "16px Arial";
+                            processedContext.fillStyle = "red";
+                            processedContext.fillText(label, x_min, y_min - 5);
+                        });
                     } catch (error) {
                         console.error("Error al enviar la imagen:", error);
                     }
@@ -103,48 +118,24 @@ const CameraApp = () => {
         }
     };
 
-    const drawBoxes = (detections, context) => {
-        context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-        detections.forEach((detection) => {
-            const [x_min, y_min, x_max, y_max] = detection.box;
-            const label = detection.class;
-            const confidence = detection.confidence;
-
-            const width = x_max - x_min;
-            const height = y_max - y_min;
-
-            context.beginPath();
-            context.rect(x_min, y_min, width, height);
-            context.lineWidth = 3;
-            context.strokeStyle = "red";
-            context.fillStyle = "rgba(255, 0, 0, 0.2)";
-            context.fill();
-            context.stroke();
-
-            context.font = "18px Arial";
-            context.fillStyle = "red";
-            const text = `${label} (${(confidence * 100).toFixed(1)}%)`;
-            context.fillText(text, x_min, y_min - 5);
-        });
-    };
-
     const startCapturing = () => {
         setIsCapturing(true);
-        console.log("Iniciando captura");
-        captureIntervalRef.current = setInterval(captureAndSendImage, 250);
+        console.log("Iniciando Captura");
+        captureIntervalRef.current = setInterval(captureAndSendImage, 75);
     };
 
     const stopCapturing = () => {
         setIsCapturing(false);
         if (captureIntervalRef.current) {
+            console.log("Terminando Captura");
             clearInterval(captureIntervalRef.current);
             captureIntervalRef.current = null;
         }
     };
 
     return (
-        <div>
-            <h1>Aplicación de Cámara y Detección de Objetos</h1>
+        <div style={{ fontFamily: "Arial, sans-serif", padding: "20px" }}>
+            <h1>Detección de Objetos con Cámara</h1>
             <div>
                 <label>Selecciona un dispositivo de cámara:</label>
                 <select onChange={(e) => setSelectedDevice(e.target.value)} value={selectedDevice}>
@@ -155,11 +146,11 @@ const CameraApp = () => {
                     ))}
                 </select>
             </div>
-            <div>
+            <div style={{ marginTop: "10px" }}>
                 <button onClick={startCamera}>Iniciar Cámara</button>
                 <button onClick={stopCamera}>Detener Cámara</button>
             </div>
-            <div>
+            <div style={{ marginTop: "10px" }}>
                 <button onClick={startCapturing} disabled={isCapturing}>
                     Iniciar Captura Continua
                 </button>
@@ -167,16 +158,22 @@ const CameraApp = () => {
                     Detener Captura Continua
                 </button>
             </div>
-            <div style={{ display: "flex", gap: "20px" }}>
-                {/* Video principal con detecciones */}
-                <div style={{ position: "relative" }}>
-                    <video ref={videoRef} autoPlay style={{ display: stream ? "block" : "none" }} />
-                    <canvas ref={mainCanvasRef} style={{ position: "absolute", top: 0, left: 0 }} />
-                    <canvas ref={tempCanvasRef} style={{ display: "none" }} />
-                </div>
-                {/* Video de referencia */}
+            <div style={{ display: "flex", marginTop: "20px", gap: "20px" }}>
                 <div>
-                    <video ref={referenceVideoRef} autoPlay style={{ display: stream ? "block" : "none" }} />
+                    <h2>Video de Referencia</h2>
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        style={{ width: "640px", height: "360px", border: "1px solid #ccc" }}
+                    />
+                </div>
+                <div>
+                    <h2>Canvas Procesado</h2>
+                    <canvas ref={tempCanvasRef} style={{ display: "none" }} />
+                    <canvas
+                        ref={processedCanvasRef}
+                        style={{ width: "640px", height: "360px", border: "1px solid #ccc" }}
+                    />
                 </div>
             </div>
         </div>
