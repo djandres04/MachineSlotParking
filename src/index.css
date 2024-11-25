@@ -1,14 +1,127 @@
-video {
-  width: 100%;
-  max-width: 500px;
+body {
+  margin: 0;
+  /* font-family: "Arial, sans-serif" */
+}
+
+.loader {
+  width: 48px;
+  height: 48px;
+  border: 5px solid #00000042;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.main-container {
+  font-family: '!Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+.controls-bar-container {
+  padding-top: 30px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
   margin-bottom: 20px;
-  border: 2px solid #ccc;
-  border-radius: 8px;
+  align-items: center;
+}
+
+.control-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-left: 20px;
+}
+
+.title-container {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  align-items: center;
+  background-color: #041629;
+  color: #fff;
+  width: 100%;
+  padding: 0%;
+  margin: 0%;
+}
+
+.content-container {
+  display: flex;
+  margin-top: 20px;
+  gap: 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.content-title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.text-content-color {
+  color: #94a3b8;
+}
+
+.card {
+  border: 1px solid #cccccc6b;
+  border-radius: 0px;
+  background-color: #f1f5f9;
+}
+
+.empty-video-container {
+  display: grid;
+  place-content: center;
+  height: 100%;
+  color: #94a3b8;
+}
+
+.empty-prcessed-image-container {
+  display: grid;
+  place-content: center;
+  height: 100%;
+  color: #94a3b8;
+}
+
+.processed-image-bar-container {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  top: 8px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: auto;
+  z-index: 100;
+  color: #fff;
+}
+
+.processed-image-bar-container span {
+  padding-left: 12px;
+}
+
+.processed-image-bar-container button {
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
 }
 
 button {
   padding: 10px 20px;
-  background-color: #007bff;
+  background-color: #0daf0d;
   color: #fff;
   border: none;
   border-radius: 5px;
@@ -16,10 +129,16 @@ button {
 }
 
 button:hover {
-  background-color: #0056b3;
+  opacity: 0.8;
+}
+
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
 select {
-  padding: 10px;
-  margin-bottom: 20px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
 }
